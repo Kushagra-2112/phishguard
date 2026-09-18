@@ -1,0 +1,9 @@
+torch>=2.2
+transformers>=4.44
+datasets
+scikit-learn
+pandas
+numpy
+pyyaml
+tqdm
+streamlit

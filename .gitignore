@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model artifacts & data (large / regenerable — don't commit)
+checkpoints/*
+!checkpoints/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.pt
+*.bin
+*.safetensors
+
+# HuggingFace cache if it lands in the repo
+.cache/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
