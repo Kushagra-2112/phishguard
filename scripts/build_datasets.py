@@ -9,10 +9,56 @@ Run from the project root:
 from __future__ import annotations
 from pathlib import Path
 import pandas as pd
+import hashlib
+import re
+from langdetect import detect, LangDetectException
 
 from src.config import load_config, resolve
 from src.data.url_utils import extract_urls, pick_primary_url, clean_email_text
 
+def _normalize_for_dedup(text: str) -> str:
+    """Collapse whitespace/case and strip common variable tokens (numbers,
+    emails) so near-identical spam templates hash the same even when the
+    recipient name or a tracking ID differs between copies."""
+    t = text.lower()
+    t = re.sub(r"\S+@\S+", " ", t)          # strip email addresses
+    t = re.sub(r"\d+", " ", t)              # strip numbers/IDs
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def dedup_near_duplicates(df: pd.DataFrame, text_col: str = "text") -> pd.DataFrame:
+    """Drop rows whose normalized text hashes identically to an earlier row.
+    Cheap and effective against templated spam campaigns; won't catch every
+    paraphrase, but removes the common case of bulk-identical sends."""
+    before = len(df)
+    hashes = df[text_col].fillna("").apply(
+        lambda t: hashlib.md5(_normalize_for_dedup(t).encode()).hexdigest()
+    )
+    df = df.loc[~hashes.duplicated()].copy()
+    print(f"  near-duplicate removal: {before} -> {len(df)} rows ({before - len(df)} removed)")
+    return df
+
+
+def filter_english(df: pd.DataFrame, text_col: str = "text", min_chars: int = 20) -> pd.DataFrame:
+    """Keep only rows whose body text is detected as English. Very short
+    text is left as-is (language detection is unreliable below ~20 chars,
+    and short/empty bodies are common+legitimate in this dataset)."""
+    before = len(df)
+
+    def is_english_or_short(t: str) -> bool:
+        t = str(t)
+        if len(t.strip()) < min_chars:
+            return True
+        try:
+            return detect(t) == "en"
+        except LangDetectException:
+            return True  # ambiguous/undetectable -> keep rather than drop
+
+    mask = df[text_col].fillna("").apply(is_english_or_short)
+    df = df.loc[mask].copy()
+    print(f"  language filter: {before} -> {len(df)} rows ({before - len(df)} removed)")
+    return df
 
 def build_email_dataset(raw_dir: Path, out_dir: Path):
     path = raw_dir / "CEAS_08.csv"
@@ -34,6 +80,11 @@ def build_email_dataset(raw_dir: Path, out_dir: Path):
 
     out = df[["text", "url", "has_text", "has_url", "label"]]
     out = out[out["has_text"] | out["has_url"]]
+
+    print("Cleaning email dataset:")
+    out = dedup_near_duplicates(out, text_col="text")
+    out = filter_english(out, text_col="text")
+
     out = out.sample(frac=1, random_state=42).reset_index(drop=True)
 
     out_path = out_dir / "dataset1_email.csv"

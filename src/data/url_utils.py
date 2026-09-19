@@ -53,9 +53,9 @@ def normalize_url(url: str) -> str:
     if not url:
         return ""
     if url.startswith("//"):
-        url = "http:" + url
+        url = "https:" + url
     elif not re.match(r"(?i)^[a-z][a-z0-9+.\-]*://", url):
-        url = "http://" + url
+        url = "https://" + url
     try:
         parsed = urlparse(url)
     except ValueError:

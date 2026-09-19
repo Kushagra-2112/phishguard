@@ -23,7 +23,7 @@ data:
   modality_dropout: 0.15
 
 train:
-  epochs: 3
+  epochs: 4
   batch_size: 16
   eval_batch_size: 32
   encoder_lr: 2.0e-5
