@@ -8,30 +8,30 @@ paths:
 
 model:
   text_model_name: answerdotai/ModernBERT-base   # email body encoder
-  text_max_len: 256          # kept shorter than usual (512) since we're CPU-only
+  text_max_len: 128
   url_model_name: google/canine-s                # character-level URL encoder
-  url_max_len: 128
+  url_max_len: 64
   d_model: 256
   dropout: 0.2
   num_labels: 2
-  freeze_text_layers: 8      # freeze more layers on CPU to cut training time
-  freeze_url_layers: 6
+  freeze_text_layers: 20   # ModernBERT-base has 22 layers -- only last ~2 stay trainable
+  freeze_url_layers: 4    # CANINE-s has 12 layers -- only last ~2 stay trainable
 
 data:
   val_size: 0.1
   test_size: 0.1
-  modality_dropout: 0.15     # randomly hide a modality during training so fusion learns to cope
+  modality_dropout: 0.15
 
 train:
   epochs: 3
-  batch_size: 8              # small batch size for CPU memory/speed
-  eval_batch_size: 16
+  batch_size: 16
+  eval_batch_size: 32
   encoder_lr: 2.0e-5
   head_lr: 1.0e-3
   weight_decay: 0.01
   warmup_ratio: 0.06
   max_grad_norm: 1.0
-  num_workers: 0              # 0 is safest on Windows
+  num_workers: 0
   early_stopping_patience: 2
 
 inference:

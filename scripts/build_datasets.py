@@ -44,7 +44,7 @@ def build_email_dataset(raw_dir: Path, out_dir: Path):
     return out
 
 
-def build_url_dataset(raw_dir: Path, out_dir: Path, max_benign: int = 120_000):
+def build_url_dataset(raw_dir: Path, out_dir: Path, max_benign: int = 120_000, n_tranco: int = 40_000):
     path = raw_dir / "malicious_phish.csv"
     df = pd.read_csv(path)
     df.columns = [c.strip().lower() for c in df.columns]
@@ -54,14 +54,36 @@ def build_url_dataset(raw_dir: Path, out_dir: Path, max_benign: int = 120_000):
     phishing = df[df["type"] == "phishing"].copy()
     benign = df[df["type"] == "benign"].copy()
 
+    # The malicious-urls dataset's benign class is almost entirely deep
+    # links with paths (wikipedia articles, blog posts, etc.) and rarely
+    # includes bare root domains. Without correction, the model never sees
+    # "https://google.com"-style URLs labeled benign, and associates
+    # short/clean URLs with phishing instead. Tranco (a ranked list of the
+    # world's most popular domains) patches this gap directly.
+    tranco_path = raw_dir / "tranco.csv"
+    tranco_rows = []
+    if tranco_path.exists():
+        tranco = pd.read_csv(tranco_path, header=None, names=["rank", "domain"])
+        tranco = tranco.head(n_tranco)
+        tranco_urls = "https://" + tranco["domain"].astype(str)
+        tranco_rows = pd.DataFrame({"url": tranco_urls, "label": 0})
+        print(f"[dataset2_url] adding {len(tranco_rows)} Tranco root-domain benign examples")
+    else:
+        print("[dataset2_url] WARNING: tranco.csv not found, skipping root-domain augmentation")
+
     if len(benign) > max_benign:
         benign = benign.sample(n=max_benign, random_state=42)
 
     phishing["label"] = 1
     benign["label"] = 0
 
-    out = pd.concat([phishing[["url", "label"]], benign[["url", "label"]]], ignore_index=True)
+    parts = [phishing[["url", "label"]], benign[["url", "label"]]]
+    if len(tranco_rows):
+        parts.append(tranco_rows[["url", "label"]])
+
+    out = pd.concat(parts, ignore_index=True)
     out = out.dropna(subset=["url"])
+    out = out.drop_duplicates(subset=["url"])
     out = out.sample(frac=1, random_state=42).reset_index(drop=True)
 
     out_path = out_dir / "dataset2_url.csv"
@@ -69,7 +91,6 @@ def build_url_dataset(raw_dir: Path, out_dir: Path, max_benign: int = 120_000):
     print(f"[dataset2_url] wrote {len(out)} rows -> {out_path}")
     print(out["label"].value_counts())
     return out
-
 
 def main():
     cfg = load_config()
