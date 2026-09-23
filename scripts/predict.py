@@ -22,14 +22,24 @@ _CACHE = {}
 
 
 def load_model_and_tokenizers(checkpoint_path=None):
-    """Loads once, caches in-process -- Streamlit will call this every rerun
-    otherwise, and reloading two transformer models each time is slow."""
+    """Loads once, caches in-process. If the checkpoint isn't found locally
+    (e.g. on a fresh deployment), downloads it from the Hugging Face Hub."""
     if "model" in _CACHE:
         return _CACHE["model"], _CACHE["text_tok"], _CACHE["url_tok"], _CACHE["cfg"], _CACHE["device"]
 
     cfg = load_config()
     device = get_device()
     ckpt_path = resolve(checkpoint_path or cfg.inference.checkpoint)
+
+    if not ckpt_path.exists():
+        from huggingface_hub import hf_hub_download
+        import shutil
+        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+        downloaded = hf_hub_download(
+            repo_id="Kushagrasharma2112/phishguard-checkpoint",
+            filename="best.pt",
+        )
+        shutil.copy(downloaded, ckpt_path)
 
     text_tok, url_tok = build_tokenizers(cfg)
     model = PhishGuardModel(cfg)
