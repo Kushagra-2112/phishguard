@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>PhishGuard — Dual-Encoder Phishing Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #05070a;
+    --panel: #0d1117;
+    --panel-2: #0a0e14;
+    --border: #1c2530;
+    --text: #e4ebf1;
+    --muted: #9fb0c2;
+    --muted-dim: #6b7d90;
+    --threat: #ff3b5c;
+    --threat-dim: rgba(255,59,92,0.12);
+    --safe: #39ff88;
+    --safe-dim: rgba(57,255,136,0.1);
+    --accent: #4fd8ff;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-body: 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.65;
+    overflow-x: hidden;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  a { color: inherit; }
+  ::selection { background: var(--accent); color: #05070a; }
+
+  .bg-grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(79,216,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,216,255,0.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 90%);
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px;
+    background: rgba(5,7,10,0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-weight: 600; font-size: 15px; }
+  .brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--safe); box-shadow: 0 0 8px var(--safe); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .nav-links { display: flex; gap: 28px; font-size: 13px; color: var(--muted); }
+  .nav-links a:hover { color: var(--accent); }
+
+  /* HERO */
+  .hero { position: relative; z-index: 1; padding: 100px 0 70px; }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+  .hero-label {
+    font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid rgba(79,216,255,0.3); padding: 5px 12px; border-radius: 3px;
+    margin-bottom: 26px;
+  }
+  h1 {
+    font-family: var(--font-mono); font-weight: 700;
+    font-size: clamp(34px, 4.4vw, 52px); line-height: 1.08; letter-spacing: -0.01em;
+  }
+  h1 .threat { color: var(--threat); }
+  h1 .safe { color: var(--safe); }
+  .hero-sub {
+    max-width: 480px; margin-top: 22px; color: var(--muted); font-size: 16px;
+  }
+  .hero-cta { display: flex; gap: 14px; margin-top: 36px; flex-wrap: wrap; }
+  .btn-primary {
+    font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+    background: var(--safe); color: #05070a; padding: 13px 22px; border-radius: 3px;
+    display: inline-block; transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--safe-dim); }
+  .btn-secondary {
+    font-family: var(--font-mono); font-size: 13px;
+    border: 1px solid var(--border); color: var(--text);
+    padding: 13px 22px; border-radius: 3px; transition: border-color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  /* TERMINAL */
+  .terminal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+  .terminal-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 11px 14px; background: var(--panel-2); border-bottom: 1px solid var(--border);
+  }
+  .tdot { width: 10px; height: 10px; border-radius: 50%; }
+  .tdot.r { background: #ff5f57; } .tdot.y { background: #febc2e; } .tdot.g { background: #28c840; }
+  .terminal-title { margin-left: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .terminal-body { padding: 20px; font-family: var(--font-mono); font-size: 13px; min-height: 300px; }
+  .term-line { color: var(--muted); margin-bottom: 6px; }
+  .term-prompt { color: var(--accent); }
+  #typed { color: var(--text); white-space: pre-wrap; }
+  .cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: middle; animation: blink 0.9s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .verdict-box {
+    margin-top: 16px; padding: 12px 14px; border-radius: 4px; font-size: 12px;
+    opacity: 0; transform: translateY(6px); transition: opacity 0.4s, transform 0.4s;
+  }
+  .verdict-box.show { opacity: 1; transform: translateY(0); }
+  .verdict-box.threat { background: var(--threat-dim); border: 1px solid rgba(255,59,92,0.4); color: var(--threat); }
+  .verdict-box.safe { background: var(--safe-dim); border: 1px solid rgba(57,255,136,0.4); color: var(--safe); }
+
+  /* STATS STRIP */
+  .stats { position: relative; z-index: 1; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); }
+  .stat { padding: 32px 24px; border-right: 1px solid var(--border); }
+  .stat:last-child { border-right: none; }
+  .stat-val { font-family: var(--font-mono); font-size: 30px; font-weight: 700; }
+  .stat-val.stat-word { font-size: 20px; letter-spacing: -0.01em; }
+  .stat-val.safe-c { color: var(--safe); } .stat-val.threat-c { color: var(--threat); } .stat-val.accent-c { color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+  /* ARCHITECTURE / PIPELINE */
+  .section { position: relative; z-index: 1; padding: 100px 0; }
+  .section-head { max-width: 560px; margin-bottom: 56px; }
+  .section-kicker { font-family: var(--font-mono); font-size: 12px; color: var(--accent); margin-bottom: 10px; }
+  .section-title { font-family: var(--font-mono); font-size: clamp(28px,3.4vw,38px); font-weight: 700; line-height: 1.15; }
+  .section-desc { color: var(--muted); margin-top: 14px; font-size: 15px; }
+
+  .diagram-wrap {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 24px 12px 8px; margin-bottom: 40px; overflow-x: auto;
+  }
+  .arch-svg { width: 100%; min-width: 640px; height: auto; display: block; }
+  .svg-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; fill: var(--muted); }
+  .svg-label-safe { fill: var(--safe); }
+  .svg-label-accent { fill: var(--accent); }
+  .svg-box { fill: var(--panel-2); stroke-width: 1.3; }
+  .svg-box-safe { stroke: rgba(57,255,136,0.5); }
+  .svg-box-accent { stroke: rgba(79,216,255,0.5); }
+  .svg-box-safe-fill { fill: var(--safe); stroke: var(--safe); }
+  .svg-box-accent-fill { fill: var(--accent); stroke: var(--accent); }
+  .svg-box-fusion { fill: var(--panel-2); stroke: #ffb84f; stroke-width: 1.4; }
+  .svg-box-neutral { fill: var(--panel-2); stroke: var(--text); stroke-opacity: 0.4; }
+  .svg-box-text { font-family: var(--font-mono); font-size: 13px; font-weight: 600; fill: var(--text); }
+  .svg-box-subtext { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
+  .svg-box-text-inv { font-family: var(--font-mono); font-size: 13px; font-weight: 700; fill: #05070a; }
+  .svg-box-subtext-inv { font-family: var(--font-mono); font-size: 9px; fill: rgba(5,7,10,0.65); }
+
+  .pipeline { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding-bottom: 6px; }
+  .pl-step {
+    flex: 1 1 0; min-width: 190px; background: var(--panel); border: 1px solid var(--border);
+    padding: 22px; position: relative;
+  }
+  .pl-step + .pl-step { border-left: none; }
+  .pl-num { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .pl-title { font-family: var(--font-mono); font-size: 15px; font-weight: 600; margin-top: 10px; }
+  .pl-desc { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .pl-arrow {
+    display: flex; align-items: center; justify-content: center; width: 28px; color: var(--muted); flex-shrink: 0;
+    background: var(--panel-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+
+  /* ATTACK PATTERNS */
+  .attack-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .attack-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 22px 24px; }
+  .attack-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 14px; }
+  .attack-compare { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .attack-row { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 13px; padding: 9px 12px; border-radius: 4px; }
+  .attack-row.bad { background: var(--threat-dim); border: 1px solid rgba(255,59,92,0.35); color: var(--threat); }
+  .attack-row.good { background: var(--safe-dim); border: 1px solid rgba(57,255,136,0.3); color: var(--safe); }
+  .attack-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; opacity: 0.85; flex-shrink: 0; width: 42px; }
+  .attack-desc { font-size: 13.5px; color: var(--muted); }
+
+  /* CAPABILITIES GRID */
+  .cap-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); }
+  .cap-card { background: var(--panel); padding: 26px; }
+  .cap-icon { font-family: var(--font-mono); font-size: 20px; color: var(--accent); }
+  .cap-title { font-family: var(--font-mono); font-size: 14px; font-weight: 600; margin-top: 14px; }
+  .cap-desc { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* CTA */
+  .cta-section { position: relative; z-index: 1; padding: 90px 0; text-align: center; border-top: 1px solid var(--border); }
+  .cta-title { font-family: var(--font-mono); font-size: clamp(26px,3.6vw,40px); font-weight: 700; }
+  .cta-sub { color: var(--muted); margin: 16px auto 32px; max-width: 460px; font-size: 15px; }
+
+  footer {
+    position: relative; z-index: 1; border-top: 1px solid var(--border);
+    padding: 28px 0; display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+    padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  }
+  footer a:hover { color: var(--accent); }
+  .footer-links { display: flex; gap: 20px; }
+
+  @media (max-width: 860px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2,1fr); }
+    .stat:nth-child(2) { border-right: none; }
+    .cap-grid { grid-template-columns: 1fr; }
+    .attack-grid { grid-template-columns: 1fr; }
+    .pipeline { flex-direction: column; }
+    .pl-arrow { width: 100%; height: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .brand-dot, .cursor { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-grid" aria-hidden="true"></div>
+
+<nav>
+  <div class="brand"><span class="brand-dot"></span> PhishGuard</div>
+  <div class="nav-links">
+    <a href="#pipeline">Architecture</a>
+    <a href="#attacks">Attack Patterns</a>
+    <a href="#capabilities">Capabilities</a>
+    <a href="#try">Demo</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="hero-label">● dual-encoder fusion model</span>
+      <h1>Every email tells<br>two stories.<br>Read <span class="safe">both</span> before<br>you trust <span class="threat">either</span>.</h1>
+      <p class="hero-sub">PhishGuard reads the message and the link as separate signals — a language model for what's written, a character-level model for where it points — then fuses them into one verdict.</p>
+      <div class="hero-cta">
+        <a href="https://github.com/Kushagra-2112/phishguard" target="_blank" rel="noopener" class="btn-primary">Analyze a message</a>
+        <a href="#pipeline" class="btn-secondary">See how it works</a>
+      </div>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="tdot r"></span><span class="tdot y"></span><span class="tdot g"></span>
+        <span class="terminal-title">phishguard — analysis session</span>
+      </div>
+      <div class="terminal-body">
+        <div class="term-line"><span class="term-prompt">$</span> phishguard analyze --input inbox/msg_2291.eml</div>
+        <div id="typed"></div><span class="cursor"></span>
+        <div class="verdict-box threat" id="verdict1">
+          ⚠ VERDICT: PHISHING (94.2%) — url branch weight 0.81, flagged host mismatch
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="wrap stats-grid">
+    <div class="stat"><div class="stat-val safe-c">2</div><div class="stat-label">Independent encoders fused</div></div>
+    <div class="stat"><div class="stat-val accent-c">288K+</div><div class="stat-label">Training examples</div></div>
+    <div class="stat"><div class="stat-val threat-c stat-word">Character-level</div><div class="stat-label">URL analysis via CANINE — catches what word tokenizers miss</div></div>
+    <div class="stat"><div class="stat-val safe-c stat-word">Learned gate</div><div class="stat-label">Fusion weight adapts per message, not fixed</div></div>
+  </div>
+</section>
+
+<section class="section" id="pipeline">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">the pipeline</div>
+      <div class="section-title">Four stages, one decision.</div>
+      <p class="section-desc">A phishing email rarely fails in one obvious way — the writing can sound completely legitimate while the link underneath it points somewhere it shouldn't, or vice versa. PhishGuard encodes each signal on its own terms before deciding how much to trust it.</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 960 420" xmlns="http://www.w3.org/2000/svg" class="arch-svg" role="img" aria-label="Architecture diagram: email and URL branches encoded separately, fused by a learned gate, then classified">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#4a5a6d" />
+          </marker>
+          <marker id="arrowSafe" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#39ff88" />
+          </marker>
+          <marker id="arrowAccent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#4fd8ff" />
+          </marker>
+        </defs>
+
+        <!-- connecting lines -->
+        <path d="M 150 90 L 150 150" stroke="#39ff88" stroke-width="1.5" marker-end="url(#arrowSafe)" />
+        <path d="M 150 210 L 150 250" stroke="#39ff88" stroke-width="1.5" marker-end="url(#arrowSafe)" />
+        <path d="M 810 90 L 810 150" stroke="#4fd8ff" stroke-width="1.5" marker-end="url(#arrowAccent)" />
+        <path d="M 810 210 L 810 250" stroke="#4fd8ff" stroke-width="1.5" marker-end="url(#arrowAccent)" />
+        <path d="M 210 285 Q 400 285 420 300" stroke="#39ff88" stroke-width="1.5" fill="none" marker-end="url(#arrowSafe)" />
+        <path d="M 750 285 Q 560 285 540 300" stroke="#4fd8ff" stroke-width="1.5" fill="none" marker-end="url(#arrowAccent)" />
+        <path d="M 480 340 L 480 370" stroke="#8b9bad" stroke-width="1.5" marker-end="url(#arrow)" />
+
+        <!-- EMAIL branch -->
+        <text x="150" y="25" text-anchor="middle" class="svg-label svg-label-safe">DATASET-1 · EMAIL</text>
+        <rect x="70" y="35" width="160" height="50" rx="6" class="svg-box svg-box-safe" />
+        <text x="150" y="65" text-anchor="middle" class="svg-box-text">Email body</text>
+
+        <rect x="70" y="155" width="160" height="50" rx="6" class="svg-box svg-box-safe-fill" />
+        <text x="150" y="180" text-anchor="middle" class="svg-box-text-inv">ModernBERT</text>
+        <text x="150" y="195" text-anchor="middle" class="svg-box-subtext-inv">subword transformer</text>
+
+        <rect x="70" y="255" width="160" height="46" rx="6" class="svg-box svg-box-safe" />
+        <text x="150" y="283" text-anchor="middle" class="svg-box-text">Text embedding</text>
+
+        <!-- URL branch -->
+        <text x="810" y="25" text-anchor="middle" class="svg-label svg-label-accent">DATASET-2 · URL</text>
+        <rect x="730" y="35" width="160" height="50" rx="6" class="svg-box svg-box-accent" />
+        <text x="810" y="65" text-anchor="middle" class="svg-box-text">URL string</text>
+
+        <rect x="730" y="155" width="160" height="50" rx="6" class="svg-box svg-box-accent-fill" />
+        <text x="810" y="180" text-anchor="middle" class="svg-box-text-inv">CANINE</text>
+        <text x="810" y="195" text-anchor="middle" class="svg-box-subtext-inv">character-level transformer</text>
+
+        <rect x="730" y="255" width="160" height="46" rx="6" class="svg-box svg-box-accent" />
+        <text x="810" y="283" text-anchor="middle" class="svg-box-text">URL embedding</text>
+
+        <!-- FUSION -->
+        <rect x="380" y="300" width="200" height="60" rx="6" class="svg-box svg-box-fusion" />
+        <text x="480" y="325" text-anchor="middle" class="svg-box-text">Gated fusion</text>
+        <text x="480" y="341" text-anchor="middle" class="svg-box-subtext">learned weighting</text>
+
+        <!-- CLASSIFIER -->
+        <rect x="400" y="375" width="160" height="45" rx="6" class="svg-box svg-box-neutral" />
+        <text x="480" y="403" text-anchor="middle" class="svg-box-text">Classifier</text>
+      </svg>
+    </div>
+
+    <div class="pipeline">
+      <div class="pl-step">
+        <div class="pl-num">01 · TEXT</div>
+        <div class="pl-title">Email → ModernBERT</div>
+        <div class="pl-desc">Reads the full message body for the fingerprints of social engineering — manufactured urgency, spoofed sender tone, threats of account loss, requests that skip normal verification.</div>
+      </div>
+      <div class="pl-arrow">→</div>
+      <div class="pl-step">
+        <div class="pl-num">02 · URL</div>
+        <div class="pl-title">URL → CANINE</div>
+        <div class="pl-desc">Reads the link one character at a time — catching a swapped digit, an extra hyphen, or a lookalike domain that a subword tokenizer would silently merge into "normal."</div>
+      </div>
+      <div class="pl-arrow">→</div>
+      <div class="pl-step">
+        <div class="pl-num">03 · FUSE</div>
+        <div class="pl-title">Gated fusion</div>
+        <div class="pl-desc">A small learned network looks at both embeddings and decides, per message, how much weight the text deserves versus the link — never a fixed 50/50 split.</div>
+      </div>
+      <div class="pl-arrow">→</div>
+      <div class="pl-step">
+        <div class="pl-num">04 · DECIDE</div>
+        <div class="pl-title">Verdict</div>
+        <div class="pl-desc">A binary call — phishing or legitimate — returned alongside the exact gate weights, so the reasoning behind the call isn't a black box.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="attacks">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">what it's looking for</div>
+      <div class="section-title">The tells attackers can't fully hide.</div>
+      <p class="section-desc">Four patterns that show up again and again in real phishing campaigns — each one is exactly why the architecture is split the way it is.</p>
+    </div>
+
+    <div class="attack-grid">
+      <div class="attack-card">
+        <div class="attack-label">01 · TYPOSQUATTING</div>
+        <div class="attack-compare">
+          <div class="attack-row bad"><span class="attack-tag">PHISH</span> arnaz0n-support.com</div>
+          <div class="attack-row good"><span class="attack-tag">REAL</span> amazon.com</div>
+        </div>
+        <div class="attack-desc">A single swapped character is enough to fool a skim-reader. CANINE reads at the character level specifically because this trick is invisible to word-based models.</div>
+      </div>
+
+      <div class="attack-card">
+        <div class="attack-label">02 · IP-BASED HOSTS</div>
+        <div class="attack-compare">
+          <div class="attack-row bad"><span class="attack-tag">PHISH</span> http://185.63.20.14/login</div>
+          <div class="attack-row good"><span class="attack-tag">REAL</span> https://accounts.google.com</div>
+        </div>
+        <div class="attack-desc">Legitimate services almost never ask you to log in at a bare IP address. It's a cheap, disposable way to stand up infrastructure with no domain to trace.</div>
+      </div>
+
+      <div class="attack-card">
+        <div class="attack-label">03 · MANUFACTURED URGENCY</div>
+        <div class="attack-compare">
+          <div class="attack-row bad"><span class="attack-tag">PHISH</span> "Verify now or lose access in 24h"</div>
+          <div class="attack-row good"><span class="attack-tag">REAL</span> "Your statement is ready to view"</div>
+        </div>
+        <div class="attack-desc">Urgency is designed to short-circuit careful reading. ModernBERT is trained on exactly this kind of pressure language, not just keyword matching.</div>
+      </div>
+
+      <div class="attack-card">
+        <div class="attack-label">04 · MISMATCHED SIGNALS</div>
+        <div class="attack-compare">
+          <div class="attack-row bad"><span class="attack-tag">PHISH</span> Calm, professional email → sketchy link</div>
+          <div class="attack-row good"><span class="attack-tag">REAL</span> Consistent tone and destination</div>
+        </div>
+        <div class="attack-desc">The most convincing attacks get the writing right and hide behind a bad link — or the reverse. This is the exact case fusion exists to catch.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="capabilities">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">why fusion, not one model</div>
+      <div class="section-title">Neither signal alone is enough.</div>
+      <p class="section-desc">A model trained only on text learns to spot bad writing — and misses a clean, well-written email hiding a malicious link. A model trained only on URLs never sees the social-engineering half of the attack at all. Fusion exists because most real phishing lives in the gap between the two.</p>
+    </div>
+
+    <div class="cap-grid">
+      <div class="cap-card">
+        <div class="cap-icon">▲</div>
+        <div class="cap-title">Handles missing data</div>
+        <div class="cap-desc">Most real-world samples arrive with only a URL or only a body of text — rarely both. A learned "absent" embedding lets each branch reason confidently even when its input is empty, instead of guessing from noise.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon">◆</div>
+        <div class="cap-title">Character-aware URLs</div>
+        <div class="cap-desc">micros0ft-support.com and microsoft.com tokenize almost identically under a word-piece vocabulary. CANINE reads raw characters, so the swapped digit is visible instead of averaged away.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon">●</div>
+        <div class="cap-title">Explainable weighting</div>
+        <div class="cap-desc">Every verdict ships with the fusion gate's exact weights — so "94% phishing, driven mostly by the URL" is a real, inspectable statement, not a black-box score.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section" id="try">
+  <div class="wrap">
+    <div class="cta-title">Paste a message. Get a verdict.</div>
+    <p class="cta-sub">The live analyzer runs the full dual-encoder pipeline on whatever you give it — email text, a URL, or both.</p>
+    <a href="https://github.com/Kushagra-2112/phishguard" target="_blank" rel="noopener" class="btn-primary">Open the analyzer</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap: wrap; gap: 14px;">
+    <span>PhishGuard — research project, not a production security tool</span>
+    <div class="footer-links">
+      <a href="#pipeline">Architecture</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="https://github.com/Kushagra-2112/phishguard" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.linkedin.com/in/kushagra-sharma-75571028b/" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const lines = [
+    "→ extracting text and url from message...",
+    "→ encoding email body via ModernBERT...",
+    "→ encoding url via CANINE...",
+    "→ fusing embeddings via learned gate..."
+  ];
+  const el = document.getElementById("typed");
+  const verdict = document.getElementById("verdict1");
+  let li = 0, ci = 0;
+
+  function typeNext() {
+    if (li >= lines.length) {
+      setTimeout(() => verdict.classList.add("show"), 300);
+      return;
+    }
+    const line = lines[li];
+    if (ci <= line.length) {
+      el.textContent = lines.slice(0, li).join("\n") + (li > 0 ? "\n" : "") + line.slice(0, ci);
+      ci++;
+      setTimeout(typeNext, 18);
+    } else {
+      el.textContent += "\n";
+      li++; ci = 0;
+      setTimeout(typeNext, 250);
+    }
+  }
+  typeNext();
+</script>
+</body>
+</html>
